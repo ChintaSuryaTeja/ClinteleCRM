@@ -43,8 +43,11 @@ from alembic.config import Config  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
+from app.config import settings  # noqa: E402
 from app.db import engine, get_db  # noqa: E402
+from app.importer import process_delete, process_import  # noqa: E402
 from app.main import app  # noqa: E402
+from app.routers.imports import JobQueue, get_job_queue  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -74,11 +77,25 @@ def db():
     connection.close()
 
 
+@pytest.fixture(autouse=True)
+def upload_dir(tmp_path, monkeypatch) -> str:
+    """Each test gets its own empty folder for uploaded files."""
+    path = str(tmp_path / "uploads")
+    monkeypatch.setattr(settings, "upload_dir", path)
+    return path
+
+
 @pytest.fixture
 def make_client(db: Session):
     """Return a function that creates API clients. Each client is a separate
     browser with its own cookies, which is how tests log in as different users."""
     app.dependency_overrides[get_db] = lambda: db
+    # Instead of sending jobs to the worker through Redis, run them straight
+    # away inside the test's transaction.
+    app.dependency_overrides[get_job_queue] = lambda: JobQueue(
+        run_import=lambda job_id: process_import(db, job_id, settings.upload_dir),
+        delete_import=lambda job_id: process_delete(db, job_id),
+    )
     clients: list[TestClient] = []
 
     def _make() -> TestClient:

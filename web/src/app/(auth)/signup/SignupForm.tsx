@@ -4,11 +4,22 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState } from "react";
 
-import { Button, ErrorNotice, TextField } from "@/components/ui";
+import { Button, ErrorNotice, SelectField, TextField } from "@/components/ui";
 import { postJson } from "@/lib/client-api";
 
 type FormState = { error: string | null; organization_name: string; email: string };
 const EMPTY: FormState = { error: null, organization_name: "", email: "" };
+
+const CURRENCIES = [
+  ["USD", "US dollar"],
+  ["EUR", "Euro"],
+  ["GBP", "British pound"],
+  ["INR", "Indian rupee"],
+  ["CAD", "Canadian dollar"],
+  ["AUD", "Australian dollar"],
+  ["JPY", "Japanese yen"],
+  ["SGD", "Singapore dollar"],
+];
 
 export function SignupForm() {
   const router = useRouter();
@@ -17,6 +28,7 @@ export function SignupForm() {
     async (_previous: FormState, form: FormData): Promise<FormState> => {
       const result = await postJson("/auth/signup", {
         organization_name: form.get("organization_name"),
+        currency: form.get("currency"),
         email: form.get("email"),
         password: form.get("password"),
       });
@@ -51,6 +63,18 @@ export function SignupForm() {
         maxLength={200}
         required
       />
+      <SelectField
+        id="currency"
+        name="currency"
+        label="Currency of your sales data"
+        defaultValue="USD"
+      >
+        {CURRENCIES.map(([code, name]) => (
+          <option key={code} value={code}>
+            {code} – {name}
+          </option>
+        ))}
+      </SelectField>
       <TextField
         id="email"
         name="email"

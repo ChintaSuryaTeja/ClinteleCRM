@@ -33,7 +33,7 @@ def set_session_cookie(response: Response, user: User) -> None:
 @router.post("/signup", status_code=status.HTTP_201_CREATED)
 def signup(body: SignupIn, response: Response, db: DbSession) -> MeOut:
     """Create a new organization with the caller as its first admin."""
-    organization = Organization(name=body.organization_name.strip())
+    organization = Organization(name=body.organization_name.strip(), currency=body.currency)
     user = User(
         organization=organization,
         email=body.email,

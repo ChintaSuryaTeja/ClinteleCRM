@@ -31,12 +31,15 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
       COOKIE_SECURE: ${COOKIE_SECURE}
+      UPLOAD_DIR: /data/uploads
       # Windows folders mounted into Docker don't send file-change events, so poll.
       WATCHFILES_FORCE_POLLING: "true"
     # Apply any new migrations, then start the API and restart it on code changes.
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     volumes:
       - ./api:/app
+      # Uploaded files wait here for the worker, so both containers mount it.
+      - appdata:/data
     ports:
       - "8000:8000"
     depends_on:
@@ -48,9 +51,11 @@ services:
   worker:
     build: ./api
     environment: *api-env
-    command: celery -A app.worker worker --loglevel=info
+    # watchfiles restarts the worker when Python code changes (Celery can't reload itself).
+    command: watchfiles --filter python "celery -A app.worker worker --loglevel=info" app
     volumes:
       - ./api:/app
+      - appdata:/data
     depends_on:
       db:
         condition: service_healthy
@@ -59,9 +64,14 @@ services:
 
   web:
     build: ./web
+    # Webpack instead of Turbopack for the dev server: on Windows, Docker gets no
+    # file-change events, and webpack's polling watcher (WATCHPACK_POLLING) is
+    # the one that reliably notices saved edits. Production builds are unaffected.
+    command: npm run dev -- --webpack
     environment:
       # Next.js forwards /api/* to this address (see web/next.config.ts).
       API_URL: http://api:8000
+      # Windows folders mounted into Docker don't send file-change events, so poll.
       WATCHPACK_POLLING: "true"
     volumes:
       - ./web:/app
@@ -76,5 +86,6 @@ services:
 
 volumes:
   pgdata:
+  appdata:
   web_node_modules:
   web_next:

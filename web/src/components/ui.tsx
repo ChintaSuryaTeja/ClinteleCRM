@@ -1,6 +1,16 @@
 /** Small building blocks shared by every screen. */
 
+import Link from "next/link";
 import type { ComponentProps, ReactNode } from "react";
+
+const PRIMARY =
+  "inline-flex h-10 items-center justify-center rounded-md bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:cursor-wait disabled:opacity-70";
+const SECONDARY =
+  "inline-flex h-10 items-center justify-center rounded-md border border-line bg-surface px-4 font-medium text-ink hover:bg-canvas disabled:cursor-wait disabled:opacity-70";
+const DANGER =
+  "inline-flex h-10 items-center justify-center rounded-md bg-danger px-4 font-medium text-surface hover:opacity-90 disabled:cursor-wait disabled:opacity-70";
+const FIELD =
+  "h-10 rounded-md border border-line bg-surface px-3 text-base text-ink placeholder:text-muted focus-visible:border-accent";
 
 export function PageTitle({ children }: { children: ReactNode }) {
   return (
@@ -25,12 +35,7 @@ export function TextField({ label, hint, id, ...props }: TextFieldProps) {
       <label htmlFor={id} className="text-sm font-medium">
         {label}
       </label>
-      <input
-        id={id}
-        aria-describedby={hintId}
-        className="h-10 rounded-md border border-line bg-surface px-3 text-base text-ink placeholder:text-muted focus-visible:border-accent"
-        {...props}
-      />
+      <input id={id} aria-describedby={hintId} className={FIELD} {...props} />
       {hint && (
         <p id={hintId} className="text-sm text-muted">
           {hint}
@@ -40,13 +45,43 @@ export function TextField({ label, hint, id, ...props }: TextFieldProps) {
   );
 }
 
-export function Button({ className = "", ...props }: ComponentProps<"button">) {
+type Variant = { variant?: "primary" | "secondary" | "danger" };
+const VARIANTS = { primary: PRIMARY, secondary: SECONDARY, danger: DANGER };
+
+export function Button({
+  variant = "primary",
+  className = "",
+  ...props
+}: ComponentProps<"button"> & Variant) {
+  return <button className={`${VARIANTS[variant]} ${className}`} {...props} />;
+}
+
+export function ButtonLink({
+  variant = "primary",
+  className = "",
+  ...props
+}: ComponentProps<typeof Link> & Variant) {
+  return <Link className={`${VARIANTS[variant]} ${className}`} {...props} />;
+}
+
+type SelectFieldProps = ComponentProps<"select"> & { label: string };
+
+export function SelectField({ label, id, children, ...props }: SelectFieldProps) {
   return (
-    <button
-      className={`h-10 rounded-md bg-accent px-4 font-medium text-on-accent hover:bg-accent-strong disabled:cursor-wait disabled:opacity-70 ${className}`}
-      {...props}
-    />
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-sm font-medium">
+        {label}
+      </label>
+      <select id={id} className={FIELD} {...props}>
+        {children}
+      </select>
+    </div>
   );
+}
+
+/** A section heading inside a page. */
+export function SectionTitle({ children }: { children: ReactNode }) {
+  return <h2 className="text-base font-semibold">{children}</h2>;
 }
 
 /** What a screen shows before there is any data: what's missing and what to do about it. */

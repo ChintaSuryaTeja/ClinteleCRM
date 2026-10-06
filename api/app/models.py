@@ -59,6 +59,7 @@ class ImportStatus(StrEnum):
     RUNNING = "running"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
+    DELETING = "deleting"  # the worker is removing this import's orders
 
 
 def id_column() -> Mapped[int]:
@@ -74,6 +75,8 @@ class Organization(Base):
 
     id: Mapped[int] = id_column()
     name: Mapped[str] = mapped_column(String(200))
+    # ISO 4217 code (USD, GBP, EUR...). All of an organization's amounts are in this currency.
+    currency: Mapped[str] = mapped_column(String(3), server_default="USD")
     created_at: Mapped[datetime] = created_at_column()
 
 
@@ -124,6 +127,11 @@ class Order(Base):
             ["organization_id", "customer_id"],
             ["customers.organization_id", "customers.id"],
         ),
+        ForeignKeyConstraint(
+            ["organization_id", "import_job_id"],
+            ["import_jobs.organization_id", "import_jobs.id"],
+        ),
+        Index("ix_orders_organization_id_import_job_id", "organization_id", "import_job_id"),
         # Most analytics queries ask "orders for this organization in this date range".
         Index("ix_orders_organization_id_ordered_at", "organization_id", "ordered_at"),
         Index("ix_orders_organization_id_customer_id", "organization_id", "customer_id"),
@@ -132,6 +140,8 @@ class Order(Base):
     id: Mapped[int] = id_column()
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
     customer_id: Mapped[int] = mapped_column(BigInteger)
+    # The import that created this order, so deleting the import can remove it.
+    import_job_id: Mapped[int | None] = mapped_column(BigInteger)
     external_id: Mapped[str] = mapped_column(String(100))
     ordered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     # Money is stored as an exact decimal, never a float, to avoid rounding errors.
@@ -176,7 +186,7 @@ class CustomerMetrics(Base):
 
     customer_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
-    # RFM: days since last order, number of orders, total spend.
+    # RFM: days since last order, number of orders (frequency), total spend (monetary).
     recency_days: Mapped[int | None] = mapped_column(Integer)
     frequency: Mapped[int | None] = mapped_column(Integer)
     monetary: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
@@ -184,6 +194,8 @@ class CustomerMetrics(Base):
     f_score: Mapped[int | None] = mapped_column(SmallInteger)
     m_score: Mapped[int | None] = mapped_column(SmallInteger)
     segment: Mapped[str | None] = mapped_column(String(40))
+    first_order_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_order_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lifetime_value: Mapped[Decimal | None] = mapped_column(Numeric(14, 2))
     is_churned: Mapped[bool | None] = mapped_column(Boolean)
     churned_at: Mapped[date | None] = mapped_column(Date)
@@ -195,11 +207,14 @@ class CustomerMetrics(Base):
 class ImportJob(Base):
     __tablename__ = "import_jobs"
     __table_args__ = (
+        UniqueConstraint("organization_id", "id"),
         ForeignKeyConstraint(
             ["organization_id", "created_by_user_id"],
             ["users.organization_id", "users.id"],
         ),
-        CheckConstraint("status IN ('queued', 'running', 'succeeded', 'failed')", name="status"),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'deleting')", name="status"
+        ),
         Index("ix_import_jobs_organization_id_created_at", "organization_id", "created_at"),
     )
 
@@ -210,8 +225,48 @@ class ImportJob(Base):
     status: Mapped[str] = mapped_column(String(16), server_default=ImportStatus.QUEUED.value)
     rows_imported: Mapped[int] = mapped_column(Integer, server_default="0")
     rows_rejected: Mapped[int] = mapped_column(Integer, server_default="0")
+    # Rows of orders that were already imported earlier, so were left alone.
+    rows_skipped: Mapped[int] = mapped_column(Integer, server_default="0")
     # A list of {"row": n, "errors": [...]} for rows that failed validation.
     error_report: Mapped[list | None] = mapped_column(JSONB)
+    # Why the whole file failed (e.g. a required column is missing).
+    failure_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = created_at_column()
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# --- Daily summaries -------------------------------------------------------
+# The worker rebuilds these from the raw orders after every import. The
+# dashboard's date-range filter adds up daily rows instead of scanning every
+# order, so it stays fast however many orders there are.
+
+
+class DailyRevenue(Base):
+    """Revenue and order count per day for one organization."""
+
+    __tablename__ = "daily_revenue"
+
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    revenue: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    orders: Mapped[int] = mapped_column(Integer)
+
+
+class DailyCustomerRevenue(Base):
+    """Revenue and order count per customer per day. Used for top customers in a date range."""
+
+    __tablename__ = "daily_customer_revenue"
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["organization_id", "customer_id"],
+            ["customers.organization_id", "customers.id"],
+        ),
+        Index("ix_daily_customer_revenue_organization_id_day", "organization_id", "day"),
+    )
+
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
+    customer_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    revenue: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    orders: Mapped[int] = mapped_column(Integer)

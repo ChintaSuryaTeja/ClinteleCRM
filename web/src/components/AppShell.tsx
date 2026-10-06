@@ -9,8 +9,12 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { Wordmark } from "@/components/Wordmark";
 import type { CurrentUser } from "@/lib/session";
 
-// Screens are added here as they are built.
-const NAV_ITEMS = [{ href: "/dashboard", label: "Dashboard" }];
+// Screens are added here as they are built. adminOnly items are hidden from viewers.
+const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", adminOnly: false },
+  { href: "/customers", label: "Customers", adminOnly: false },
+  { href: "/import", label: "Import", adminOnly: true },
+];
 
 const ROLE_LABELS = { admin: "Admin", viewer: "Viewer" };
 
@@ -49,7 +53,7 @@ export function AppShell({ user, children }: { user: CurrentUser; children: Reac
 
         <nav aria-label="Main" className="flex-1 px-3 py-4 lg:py-8">
           <ul className="flex flex-col gap-0.5">
-            {NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.filter((item) => !item.adminOnly || user.role === "admin").map((item) => {
               const active = pathname.startsWith(item.href);
               return (
                 <li key={item.href}>

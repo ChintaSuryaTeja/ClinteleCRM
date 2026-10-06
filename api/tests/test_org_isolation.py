@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.models import Customer, Order, Organization
-from tests.helpers import PASSWORD, add_user, signup
+from tests.helpers import PASSWORD, SAMPLE_ORDERS, add_user, signup, upload
 
 
 def test_admin_only_sees_users_from_own_organization(make_client):
@@ -84,3 +84,57 @@ def test_database_rejects_order_pointing_at_another_organizations_customer(db):
 
     with pytest.raises(IntegrityError):
         db.flush()
+
+
+# --- Imported data ------------------------------------------------------------
+
+
+def _two_organizations(make_client):
+    """Acme has imported the sample orders; Globex has imported nothing."""
+    acme = make_client()
+    signup(acme, "Acme", "admin@acme.com")
+    job = upload(acme, SAMPLE_ORDERS)
+    globex = make_client()
+    signup(globex, "Globex", "admin@globex.com")
+    return acme, globex, job
+
+
+def test_dashboard_only_counts_own_orders(make_client):
+    acme, globex, _ = _two_organizations(make_client)
+
+    assert acme.get("/dashboard").json()["revenue"] == 140.50
+    globex_dashboard = globex.get("/dashboard").json()
+    assert globex_dashboard["revenue"] == 0
+    assert globex_dashboard["top_customers"] == []
+
+
+def test_customer_list_and_export_only_show_own_customers(make_client):
+    _, globex, _ = _two_organizations(make_client)
+
+    assert globex.get("/customers").json()["total"] == 0
+    assert len(globex.get("/customers/export.csv").text.splitlines()) == 1  # header only
+
+
+def test_cannot_open_another_organizations_customer(make_client):
+    acme, globex, _ = _two_organizations(make_client)
+    acme_customer_id = acme.get("/customers").json()["items"][0]["id"]
+
+    assert globex.get(f"/customers/{acme_customer_id}").status_code == 404
+
+
+def test_cannot_see_another_organizations_imports(make_client):
+    _, globex, job = _two_organizations(make_client)
+
+    assert globex.get("/imports").json() == []
+    assert globex.get(f"/imports/{job['id']}").status_code == 404
+    assert globex.get(f"/imports/{job['id']}/errors.csv").status_code == 404
+
+
+def test_same_order_ids_in_two_organizations_are_separate(make_client):
+    acme, globex, _ = _two_organizations(make_client)
+
+    job = upload(globex, SAMPLE_ORDERS)  # same order_ids and customer_ids as Acme's
+
+    assert (job["rows_imported"], job["rows_skipped"]) == (6, 0)
+    assert globex.get("/dashboard").json()["revenue"] == 140.50
+    assert acme.get("/dashboard").json()["revenue"] == 140.50

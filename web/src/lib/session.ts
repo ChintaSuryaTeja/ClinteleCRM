@@ -7,5 +7,5 @@ export type CurrentUser = {
   id: number;
   email: string;
   role: Role;
-  organization: { id: number; name: string };
+  organization: { id: number; name: string; currency: string };
 };

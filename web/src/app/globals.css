@@ -19,6 +19,9 @@
   --on-accent: #ffffff;
   --danger: #a83a2a;
   --danger-soft: #f8e6e2;
+  /* Data colour for charts, checked with the dataviz palette validator
+     against the surface (lightness band, chroma, 3:1 contrast). */
+  --chart-1: #0e8a6e;
   color-scheme: light;
 }
 
@@ -34,6 +37,7 @@
     --on-accent: #08201a;
     --danger: #f08a78;
     --danger-soft: #3a1f1a;
+    --chart-1: #2fa585;
     color-scheme: dark;
   }
 }
@@ -49,6 +53,7 @@
   --on-accent: #08201a;
   --danger: #f08a78;
   --danger-soft: #3a1f1a;
+  --chart-1: #2fa585;
   color-scheme: dark;
 }
 
@@ -63,14 +68,20 @@
   --color-on-accent: var(--on-accent);
   --color-danger: var(--danger);
   --color-danger-soft: var(--danger-soft);
+  --color-chart-1: var(--chart-1);
   --font-sans: var(--font-plex);
 }
 
 body {
   background: var(--canvas);
   color: var(--ink);
-  /* Every digit the same width, so numbers line up in tables and charts. */
+  /* Every digit the same width, so numbers line up in tables and charts.
+     Large standalone figures switch back to proportional digits (.figure). */
   font-variant-numeric: tabular-nums;
+}
+
+.figure {
+  font-variant-numeric: proportional-nums;
 }
 
 :focus-visible {

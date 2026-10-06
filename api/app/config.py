@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 720
     # Send the login cookie over HTTPS only. Must be true in production.
     cookie_secure: bool = False
+    # Uploaded import files wait here until the worker processes them. The API
+    # and the worker must both see this folder (a shared Docker volume).
+    upload_dir: str = "/data/uploads"
+    max_upload_mb: int = 50
 
 
 settings = Settings()
