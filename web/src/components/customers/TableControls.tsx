@@ -5,28 +5,27 @@ import { Th } from "@/components/table";
 import { Button } from "@/components/ui";
 import { formatNumber } from "@/lib/format";
 
-type Query = Record<string, string>;
-
-function withChanges(current: Query, changes: Query): string {
-  const query = new URLSearchParams({ ...current, ...changes });
-  return `/customers?${query}`;
+/** The current page's URL with some query parameters changed. Repeated keys (?segment=) survive. */
+function withChanges(basePath: string, query: string, changes: Record<string, string>): string {
+  const params = new URLSearchParams(query);
+  for (const [key, value] of Object.entries(changes)) params.set(key, value);
+  return `${basePath}?${params}`;
 }
+
+type Location = { basePath: string; query: string };
 
 /** A column header that sorts by that column; clicking again flips the direction. */
 export function SortHeader({
   label,
   column,
-  current,
   numeric,
-}: {
-  label: string;
-  column: string;
-  current: Query;
-  numeric?: boolean;
-}) {
+  basePath,
+  query,
+}: Location & { label: string; column: string; numeric?: boolean }) {
   const navigate = useFilterNavigation();
-  const sort = current.sort ?? "total_spent";
-  const direction = current.direction ?? "desc";
+  const params = new URLSearchParams(query);
+  const sort = params.get("sort") ?? "total_spent";
+  const direction = params.get("direction") ?? "desc";
   const active = sort === column;
   // Names read A to Z first; numbers and dates read biggest or newest first.
   const firstDirection = column === "name" ? "asc" : "desc";
@@ -39,7 +38,9 @@ export function SortHeader({
     >
       <button
         type="button"
-        onClick={() => navigate(withChanges(current, { sort: column, direction: next, page: "1" }))}
+        onClick={() =>
+          navigate(withChanges(basePath, query, { sort: column, direction: next, page: "1" }))
+        }
         className={`inline-flex items-center gap-1 hover:text-ink ${active ? "text-ink" : ""}`}
       >
         {label}
@@ -52,20 +53,17 @@ export function SortHeader({
 }
 
 export function Pagination({
-  current,
+  basePath,
+  query,
   page,
   pageSize,
   total,
-}: {
-  current: Query;
-  page: number;
-  pageSize: number;
-  total: number;
-}) {
+}: Location & { page: number; pageSize: number; total: number }) {
   const navigate = useFilterNavigation();
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
   const first = (page - 1) * pageSize + 1;
   const last = Math.min(page * pageSize, total);
+  const goTo = (target: number) => navigate(withChanges(basePath, query, { page: String(target) }));
 
   return (
     <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-3 text-sm">
@@ -77,7 +75,7 @@ export function Pagination({
           type="button"
           variant="secondary"
           disabled={page <= 1}
-          onClick={() => navigate(withChanges(current, { page: String(page - 1) }))}
+          onClick={() => goTo(page - 1)}
           className="disabled:cursor-not-allowed"
         >
           Previous
@@ -86,7 +84,7 @@ export function Pagination({
           type="button"
           variant="secondary"
           disabled={page >= lastPage}
-          onClick={() => navigate(withChanges(current, { page: String(page + 1) }))}
+          onClick={() => goTo(page + 1)}
           className="disabled:cursor-not-allowed"
         >
           Next

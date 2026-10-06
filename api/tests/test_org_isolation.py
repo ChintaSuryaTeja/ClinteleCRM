@@ -138,3 +138,13 @@ def test_same_order_ids_in_two_organizations_are_separate(make_client):
     assert (job["rows_imported"], job["rows_skipped"]) == (6, 0)
     assert globex.get("/dashboard").json()["revenue"] == 140.50
     assert acme.get("/dashboard").json()["revenue"] == 140.50
+
+
+def test_segments_retention_and_churn_only_use_own_customers(make_client):
+    acme, globex, _ = _two_organizations(make_client)
+
+    assert acme.get("/segments").json()["customers"] == 3
+    assert globex.get("/segments").json()["customers"] == 0
+    assert globex.get("/retention").json()["cohorts"] == []
+    assert globex.get("/churn").json()["months"] == []
+    assert globex.get("/customers", params={"segment": "Champions"}).json()["total"] == 0

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { SegmentBadge } from "@/components/SegmentBadge";
 import { Table, Td, Th } from "@/components/table";
 import { PageTitle, Panel, SectionTitle } from "@/components/ui";
 import { customerLabel, formatDate, formatMoney, formatNumber } from "@/lib/format";
@@ -30,6 +31,11 @@ export default async function CustomerPage({ params }: { params: Params }) {
           : formatMoney(customer.average_order_value, currency),
     },
     {
+      label: "Lifetime value",
+      value:
+        customer.lifetime_value === null ? "–" : formatMoney(customer.lifetime_value, currency),
+    },
+    {
       label: "First order",
       value: customer.first_order_at ? formatDate(customer.first_order_at) : "–",
     },
@@ -50,8 +56,33 @@ export default async function CustomerPage({ params }: { params: Params }) {
         {customer.email && <p className="text-muted">{customer.email}</p>}
       </div>
 
+      {customer.segment && (
+        <Panel className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-3 p-5">
+          <div>
+            <p className="text-sm text-muted">Segment</p>
+            <p className="mt-1 font-medium">
+              <SegmentBadge segment={customer.segment} />
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted">Scores, 1 to 5</p>
+            <p className="mt-1">
+              Recency {customer.r_score}, frequency {customer.f_score}, monetary {customer.m_score}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted">Status</p>
+            <p className="mt-1">
+              {customer.is_churned && customer.churned_at
+                ? `Churned on ${formatDate(customer.churned_at)}, 90 days after their last order`
+                : "Active: ordered in the last 90 days"}
+            </p>
+          </div>
+        </Panel>
+      )}
+
       <Panel className="mt-6">
-        <dl className="grid grid-cols-2 divide-line sm:grid-cols-3 lg:grid-cols-5 lg:divide-x">
+        <dl className="grid grid-cols-2 divide-line sm:grid-cols-3 lg:grid-cols-6 lg:divide-x">
           {facts.map((fact) => (
             <div key={fact.label} className="p-5">
               <dt className="text-sm text-muted">{fact.label}</dt>

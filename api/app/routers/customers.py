@@ -36,6 +36,13 @@ SORT_COLUMNS = {
     "total_spent": spent_column,
     "orders": orders_column,
     "last_order": CustomerMetrics.last_order_at,
+    "lifetime_value": CustomerMetrics.lifetime_value,
+    "churned_at": CustomerMetrics.churned_at,
+}
+SCORE_COLUMNS = {
+    "r": CustomerMetrics.r_score,
+    "f": CustomerMetrics.f_score,
+    "m": CustomerMetrics.m_score,
 }
 
 
@@ -59,6 +66,13 @@ def customers_query(organization_id: int, filters: CustomerFilters) -> Select:
             spent_column.label("total_spent"),
             CustomerMetrics.first_order_at,
             CustomerMetrics.last_order_at,
+            CustomerMetrics.segment,
+            CustomerMetrics.r_score,
+            CustomerMetrics.f_score,
+            CustomerMetrics.m_score,
+            CustomerMetrics.lifetime_value,
+            CustomerMetrics.is_churned,
+            CustomerMetrics.churned_at,
         )
         .outerjoin(
             CustomerMetrics,
@@ -91,6 +105,22 @@ def customers_query(organization_id: int, filters: CustomerFilters) -> Select:
         # "to" includes that whole day
         end = _start_of_day(filters.last_order_to + timedelta(days=1))
         query = query.where(CustomerMetrics.last_order_at < end)
+
+    if filters.segment:
+        query = query.where(CustomerMetrics.segment.in_(filters.segment))
+    for letter, column in SCORE_COLUMNS.items():
+        low = getattr(filters, f"{letter}_min")
+        high = getattr(filters, f"{letter}_max")
+        if low is not None:
+            query = query.where(column >= low)
+        if high is not None:
+            query = query.where(column <= high)
+    if filters.min_lifetime_value is not None:
+        query = query.where(CustomerMetrics.lifetime_value >= filters.min_lifetime_value)
+    if filters.max_lifetime_value is not None:
+        query = query.where(CustomerMetrics.lifetime_value <= filters.max_lifetime_value)
+    if filters.status is not None:
+        query = query.where(CustomerMetrics.is_churned.is_(filters.status == "churned"))
 
     column = SORT_COLUMNS[filters.sort]
     ordered = column.asc() if filters.direction == "asc" else column.desc()
@@ -127,6 +157,13 @@ def export_customers(
         "total_spent",
         "first_order_date",
         "last_order_date",
+        "segment",
+        "r_score",
+        "f_score",
+        "m_score",
+        "lifetime_value",
+        "status",
+        "churned_on",
     ]
     lines = [
         [
@@ -137,6 +174,13 @@ def export_customers(
             row.total_spent,
             row.first_order_at.date().isoformat() if row.first_order_at else "",
             row.last_order_at.date().isoformat() if row.last_order_at else "",
+            row.segment or "",
+            row.r_score or "",
+            row.f_score or "",
+            row.m_score or "",
+            row.lifetime_value if row.lifetime_value is not None else "",
+            "" if row.is_churned is None else ("churned" if row.is_churned else "active"),
+            row.churned_at.isoformat() if row.churned_at else "",
         ]
         for row in rows
     ]

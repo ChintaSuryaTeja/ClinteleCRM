@@ -13,6 +13,9 @@ import type { CurrentUser } from "@/lib/session";
 const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", adminOnly: false },
   { href: "/customers", label: "Customers", adminOnly: false },
+  { href: "/segments", label: "Segments", adminOnly: false },
+  { href: "/retention", label: "Retention", adminOnly: false },
+  { href: "/churn", label: "Churn", adminOnly: false },
   { href: "/import", label: "Import", adminOnly: true },
 ];
 

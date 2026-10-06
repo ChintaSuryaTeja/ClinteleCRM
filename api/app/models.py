@@ -182,6 +182,7 @@ class CustomerMetrics(Base):
         CheckConstraint("m_score BETWEEN 1 AND 5", name="m_score"),
         CheckConstraint("churn_score BETWEEN 0 AND 1", name="churn_score"),
         Index("ix_customer_metrics_organization_id_segment", "organization_id", "segment"),
+        Index("ix_customer_metrics_organization_id_churned_at", "organization_id", "churned_at"),
     )
 
     customer_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
@@ -270,3 +271,48 @@ class DailyCustomerRevenue(Base):
     day: Mapped[date] = mapped_column(Date, primary_key=True)
     revenue: Mapped[Decimal] = mapped_column(Numeric(14, 2))
     orders: Mapped[int] = mapped_column(Integer)
+
+
+# --- Step 3 analytics -------------------------------------------------------
+# Rebuilt from the orders by the worker after every import and every night.
+
+
+class OrganizationMetrics(Base):
+    """Organization-wide numbers the per-customer metrics are based on."""
+
+    __tablename__ = "organization_metrics"
+
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
+    # Metrics are measured as of the day of the latest order, not today, so
+    # historical data still makes sense.
+    as_of: Mapped[date] = mapped_column(Date)
+    data_start: Mapped[date] = mapped_column(Date)
+    # Share of active customers who churn in a month, over the last 12 complete
+    # months. None when there isn't 90 days of history yet.
+    monthly_churn_rate: Mapped[float | None] = mapped_column(Float)
+    # How long a typical customer stays: 1 / monthly churn rate, capped.
+    expected_lifetime_months: Mapped[float] = mapped_column(Float)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class MonthlyChurn(Base):
+    """Per calendar month: customers active when it began, and how many churned in it."""
+
+    __tablename__ = "monthly_churn"
+
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
+    month: Mapped[date] = mapped_column(Date, primary_key=True)  # first day of the month
+    active_customers: Mapped[int] = mapped_column(Integer)
+    churned_customers: Mapped[int] = mapped_column(Integer)
+
+
+class CohortRetention(Base):
+    """Customers grouped by the month of their first order (their cohort), and how
+    many of them ordered again N months later."""
+
+    __tablename__ = "cohort_retention"
+
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), primary_key=True)
+    cohort_month: Mapped[date] = mapped_column(Date, primary_key=True)
+    months_since: Mapped[int] = mapped_column(Integer, primary_key=True)
+    customers: Mapped[int] = mapped_column(Integer)

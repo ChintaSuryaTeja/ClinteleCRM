@@ -62,9 +62,12 @@ def test_export_uses_the_same_filters_and_includes_every_page(acme):
     assert "attachment" in response.headers["content-disposition"]
     lines = response.text.splitlines()
     assert lines[0] == (
-        "customer_id,name,email,orders,total_spent,first_order_date,last_order_date"
+        "customer_id,name,email,orders,total_spent,first_order_date,last_order_date,"
+        "segment,r_score,f_score,m_score,lifetime_value,status,churned_on"
     )
-    assert lines[1:] == [
+    # The step 3 columns are checked in test_rfm.py; here the first seven.
+    first_seven = [",".join(line.split(",")[:7]) for line in lines[1:]]
+    assert first_seven == [
         "C1,Ada,,2,55.50,2024-01-05,2024-01-20",
         "C3,Cy,,2,10.00,2024-03-01,2024-03-01",
     ]

@@ -50,3 +50,11 @@ def upload(client: TestClient, content: str | bytes, filename: str = "orders.csv
     response = client.post("/imports", files={"file": (filename, content, "text/csv")})
     assert response.status_code == 202, response.text
     return response.json()
+
+
+def orders_csv(orders: list[tuple[str, str, str, str]]) -> str:
+    """Build an upload from (order_id, date, customer_id, amount) tuples, one product each."""
+    lines = [ORDER_COLUMNS]
+    for order_id, day, customer, amount in orders:
+        lines.append(f"{order_id},{day},{customer},{customer},P,1,{amount}")
+    return "\n".join(lines) + "\n"

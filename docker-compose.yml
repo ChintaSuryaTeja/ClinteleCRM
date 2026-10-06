@@ -62,6 +62,19 @@ services:
       redis:
         condition: service_healthy
 
+  beat:
+    build: ./api
+    environment: *api-env
+    # The scheduler: puts the nightly recalculation on the queue at 02:00 UTC.
+    # Its bookkeeping file lives in the data volume, not in the project folder.
+    command: celery -A app.worker beat --loglevel=info --schedule /data/celerybeat-schedule
+    volumes:
+      - ./api:/app
+      - appdata:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
   web:
     build: ./web
     # Webpack instead of Turbopack for the dev server: on Windows, Docker gets no

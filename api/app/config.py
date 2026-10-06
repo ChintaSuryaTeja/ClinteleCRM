@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     # and the worker must both see this folder (a shared Docker volume).
     upload_dir: str = "/data/uploads"
     max_upload_mb: int = 50
+    # When the scheduler recalculates every organization's metrics each night.
+    nightly_recalculation_hour_utc: int = Field(default=2, ge=0, le=23)
 
 
 settings = Settings()

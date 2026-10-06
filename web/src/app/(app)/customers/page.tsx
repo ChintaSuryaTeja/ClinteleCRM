@@ -1,15 +1,12 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
+import { CustomerResults } from "@/components/customers/CustomerResults";
 import { RefetchFrame } from "@/components/RefetchFrame";
-import { Table, Td, Th } from "@/components/table";
 import { ButtonLink, EmptyState, PageTitle, Panel } from "@/components/ui";
-import { customerLabel, formatDate, formatMoney, formatNumber } from "@/lib/format";
 import { getCurrentUser, getCustomers } from "@/lib/server-api";
 
 import { CustomerFilters } from "./CustomerFilters";
 import { FILTER_KEYS } from "./filter-keys";
-import { Pagination, SortHeader } from "./TableControls";
 
 export const metadata: Metadata = { title: "Customers" };
 
@@ -26,11 +23,9 @@ export default async function CustomersPage({ searchParams }: { searchParams: Se
     if (typeof value === "string" && value) current[key] = value;
   }
   const filtered = FILTER_KEYS.some((key) => current[key]);
+  const query = new URLSearchParams(current);
 
-  const [user, result] = await Promise.all([
-    getCurrentUser(),
-    getCustomers(new URLSearchParams(current)),
-  ]);
+  const [user, result] = await Promise.all([getCurrentUser(), getCustomers(query)]);
   const currency = user.organization.currency;
 
   if (result.total === 0 && !filtered) {
@@ -55,10 +50,6 @@ export default async function CustomersPage({ searchParams }: { searchParams: Se
     );
   }
 
-  // The export gets the same filters and sort as the list, but every page.
-  const exportQuery = new URLSearchParams(current);
-  exportQuery.delete("page");
-
   return (
     <div className="mx-auto max-w-6xl">
       <PageTitle>Customers</PageTitle>
@@ -70,86 +61,13 @@ export default async function CustomersPage({ searchParams }: { searchParams: Se
         }
       >
         <Panel className="mt-6 p-5 sm:p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted">
-              {formatNumber(result.total)} {result.total === 1 ? "customer" : "customers"}
-              {filtered && " match these filters"}
-            </p>
-            {result.total > 0 && (
-              <a
-                href={`/api/customers/export.csv?${exportQuery}`}
-                download
-                className="text-sm font-medium text-accent underline underline-offset-2"
-              >
-                Export {formatNumber(result.total)} to CSV
-              </a>
-            )}
-          </div>
-
-          {result.total === 0 ? (
-            <p className="mt-6 text-muted">
-              No customers match these filters. Loosen them or clear them to see everyone.
-            </p>
-          ) : (
-            <>
-              <div className="mt-4">
-                <Table label="Customers">
-                  <thead>
-                    <tr>
-                      <SortHeader label="Customer" column="name" current={current} />
-                      <SortHeader label="Orders" column="orders" current={current} numeric />
-                      <SortHeader
-                        label="Total spent"
-                        column="total_spent"
-                        current={current}
-                        numeric
-                      />
-                      <Th numeric>First order</Th>
-                      <SortHeader
-                        label="Last order"
-                        column="last_order"
-                        current={current}
-                        numeric
-                      />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.items.map((customer) => (
-                      <tr key={customer.id}>
-                        <Td>
-                          <Link
-                            href={`/customers/${customer.id}`}
-                            className="font-medium underline-offset-2 hover:underline"
-                          >
-                            {customerLabel(customer)}
-                          </Link>
-                          {customer.email && (
-                            <span className="block text-muted">{customer.email}</span>
-                          )}
-                        </Td>
-                        <Td numeric>{formatNumber(customer.orders)}</Td>
-                        <Td numeric>{formatMoney(customer.total_spent, currency)}</Td>
-                        <Td numeric>
-                          {customer.first_order_at ? formatDate(customer.first_order_at) : "–"}
-                        </Td>
-                        <Td numeric>
-                          {customer.last_order_at ? formatDate(customer.last_order_at) : "–"}
-                        </Td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-              <div className="mt-5">
-                <Pagination
-                  current={current}
-                  page={result.page}
-                  pageSize={result.page_size}
-                  total={result.total}
-                />
-              </div>
-            </>
-          )}
+          <CustomerResults
+            result={result}
+            query={query.toString()}
+            basePath="/customers"
+            currency={currency}
+            filtered={filtered}
+          />
         </Panel>
       </RefetchFrame>
     </div>

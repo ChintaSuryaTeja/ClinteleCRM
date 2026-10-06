@@ -5,7 +5,15 @@ import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 
 import { SESSION_COOKIE, type CurrentUser } from "@/lib/session";
-import type { CustomerDetail, CustomerPage, Dashboard, ImportJob } from "@/lib/types";
+import type {
+  Churn,
+  CustomerDetail,
+  CustomerPage,
+  Dashboard,
+  ImportJob,
+  Retention,
+  SegmentsOverview,
+} from "@/lib/types";
 
 const apiUrl = process.env.API_URL ?? "http://localhost:8000";
 
@@ -46,4 +54,16 @@ export function getCustomer(id: string) {
 
 export function getImports() {
   return apiGet<ImportJob[]>("/imports");
+}
+
+export function getSegments() {
+  return apiGet<SegmentsOverview>("/segments");
+}
+
+export function getRetention() {
+  return apiGet<Retention>("/retention");
+}
+
+export function getChurn() {
+  return apiGet<Churn>("/churn");
 }

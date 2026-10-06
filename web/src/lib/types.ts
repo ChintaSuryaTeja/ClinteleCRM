@@ -32,6 +32,13 @@ export type CustomerRow = {
   total_spent: number;
   first_order_at: string | null;
   last_order_at: string | null;
+  segment: string | null;
+  r_score: number | null;
+  f_score: number | null;
+  m_score: number | null;
+  lifetime_value: number | null;
+  is_churned: boolean | null;
+  churned_at: string | null;
 };
 
 export type CustomerPage = { total: number; page: number; page_size: number; items: CustomerRow[] };
@@ -58,4 +65,37 @@ export type ImportJob = {
   created_at: string;
   started_at: string | null;
   finished_at: string | null;
+};
+
+export type SegmentsOverview = {
+  as_of: string | null;
+  currency: string;
+  customers: number;
+  revenue: number;
+  segments: {
+    segment: string;
+    customers: number;
+    revenue: number;
+    customer_share: number;
+    revenue_share: number;
+  }[];
+};
+
+export type Retention = {
+  as_of: string | null;
+  cohorts: { cohort_month: string; size: number; customers: number[]; rates: number[] }[];
+};
+
+export type Churn = {
+  as_of: string | null;
+  monthly_churn_rate: number | null;
+  expected_lifetime_months: number | null;
+  churned_customers: number;
+  active_customers: number;
+  months: {
+    month: string;
+    active_customers: number;
+    churned_customers: number;
+    rate: number | null;
+  }[];
 };

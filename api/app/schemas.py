@@ -132,7 +132,10 @@ class DashboardOut(BaseModel):
 
 # --- Customers --------------------------------------------------------------
 
-CustomerSort = Literal["name", "total_spent", "orders", "last_order"]
+CustomerSort = Literal[
+    "name", "total_spent", "orders", "last_order", "lifetime_value", "churned_at"
+]
+Score = Annotated[int, Field(ge=1, le=5)]
 
 
 class CustomerFilters(BaseModel):
@@ -145,6 +148,17 @@ class CustomerFilters(BaseModel):
     max_spent: float | None = Field(default=None, ge=0)
     last_order_from: date | None = None
     last_order_to: date | None = None
+    # Step 3: segment builder. Repeat ?segment= to pick several.
+    segment: list[str] = []
+    r_min: Score | None = None
+    r_max: Score | None = None
+    f_min: Score | None = None
+    f_max: Score | None = None
+    m_min: Score | None = None
+    m_max: Score | None = None
+    min_lifetime_value: float | None = Field(default=None, ge=0)
+    max_lifetime_value: float | None = Field(default=None, ge=0)
+    status: Literal["active", "churned"] | None = None
     sort: CustomerSort = "total_spent"
     direction: Literal["asc", "desc"] = "desc"
 
@@ -165,6 +179,13 @@ class CustomerRow(BaseModel):
     total_spent: float
     first_order_at: datetime | None
     last_order_at: datetime | None
+    segment: str | None
+    r_score: int | None
+    f_score: int | None
+    m_score: int | None
+    lifetime_value: float | None
+    is_churned: bool | None
+    churned_at: date | None
 
 
 class CustomerPage(BaseModel):
@@ -185,3 +206,51 @@ class CustomerOrder(BaseModel):
 class CustomerDetail(CustomerRow):
     average_order_value: float | None
     recent_orders: list[CustomerOrder]
+
+
+# --- Segments, retention, churn ----------------------------------------------
+
+
+class SegmentRow(BaseModel):
+    segment: str
+    customers: int
+    revenue: float
+    customer_share: float  # 0 to 1
+    revenue_share: float
+
+
+class SegmentsOut(BaseModel):
+    as_of: date | None
+    currency: str
+    customers: int
+    revenue: float
+    segments: list[SegmentRow]
+
+
+class CohortRow(BaseModel):
+    cohort_month: date
+    size: int
+    # Index 0 is the first month; index N is N months later, up to "as of".
+    customers: list[int]
+    rates: list[float]
+
+
+class RetentionOut(BaseModel):
+    as_of: date | None
+    cohorts: list[CohortRow]
+
+
+class ChurnMonth(BaseModel):
+    month: date
+    active_customers: int
+    churned_customers: int
+    rate: float | None
+
+
+class ChurnOut(BaseModel):
+    as_of: date | None
+    monthly_churn_rate: float | None
+    expected_lifetime_months: float | None
+    churned_customers: int
+    active_customers: int
+    months: list[ChurnMonth]

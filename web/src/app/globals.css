@@ -22,6 +22,32 @@
   /* Data colour for charts, checked with the dataviz palette validator
      against the surface (lightness band, chroma, 3:1 contrast). */
   --chart-1: #0e8a6e;
+  /* Segment colours: the dataviz reference palette's 8 categorical slots in
+     their validated order, one per segment (see src/lib/segments.ts). */
+  --segment-1: #2a78d6;
+  --segment-2: #eb6834;
+  --segment-3: #1baf7a;
+  --segment-4: #eda100;
+  --segment-5: #e87ba4;
+  --segment-6: #008300;
+  --segment-7: #4a3aa7;
+  --segment-8: #e34948;
+  /* Heatmap: one hue, near-zero fades into the surface, high is darkest. */
+  --heat-1: #cde2fb;
+  --heat-2: #9ec5f4;
+  --heat-3: #6da7ec;
+  --heat-4: #3987e5;
+  --heat-5: #256abf;
+  --heat-6: #184f95;
+  --heat-7: #0d366b;
+  /* Text on each heatmap step: dark on the pale steps, white on the deep ones. */
+  --heat-fg-1: #0d2747;
+  --heat-fg-2: #0d2747;
+  --heat-fg-3: #0d2747;
+  --heat-fg-4: #ffffff;
+  --heat-fg-5: #ffffff;
+  --heat-fg-6: #ffffff;
+  --heat-fg-7: #ffffff;
   color-scheme: light;
 }
 
@@ -38,6 +64,29 @@
     --danger: #f08a78;
     --danger-soft: #3a1f1a;
     --chart-1: #2fa585;
+    --segment-1: #3987e5;
+    --segment-2: #d95926;
+    --segment-3: #199e70;
+    --segment-4: #c98500;
+    --segment-5: #d55181;
+    --segment-6: #008300;
+    --segment-7: #9085e9;
+    --segment-8: #e66767;
+    /* On the dark surface the ramp runs the other way: near-zero is darkest. */
+    --heat-1: #0d366b;
+    --heat-2: #184f95;
+    --heat-3: #256abf;
+    --heat-4: #3987e5;
+    --heat-5: #6da7ec;
+    --heat-6: #9ec5f4;
+    --heat-7: #cde2fb;
+    --heat-fg-1: #e3eae7;
+    --heat-fg-2: #e3eae7;
+    --heat-fg-3: #e3eae7;
+    --heat-fg-4: #e3eae7;
+    --heat-fg-5: #0d2747;
+    --heat-fg-6: #0d2747;
+    --heat-fg-7: #0d2747;
     color-scheme: dark;
   }
 }
@@ -54,6 +103,29 @@
   --danger: #f08a78;
   --danger-soft: #3a1f1a;
   --chart-1: #2fa585;
+  --segment-1: #3987e5;
+  --segment-2: #d95926;
+  --segment-3: #199e70;
+  --segment-4: #c98500;
+  --segment-5: #d55181;
+  --segment-6: #008300;
+  --segment-7: #9085e9;
+  --segment-8: #e66767;
+  /* On the dark surface the ramp runs the other way: near-zero is darkest. */
+  --heat-1: #0d366b;
+  --heat-2: #184f95;
+  --heat-3: #256abf;
+  --heat-4: #3987e5;
+  --heat-5: #6da7ec;
+  --heat-6: #9ec5f4;
+  --heat-7: #cde2fb;
+  --heat-fg-1: #e3eae7;
+  --heat-fg-2: #e3eae7;
+  --heat-fg-3: #e3eae7;
+  --heat-fg-4: #e3eae7;
+  --heat-fg-5: #0d2747;
+  --heat-fg-6: #0d2747;
+  --heat-fg-7: #0d2747;
   color-scheme: dark;
 }
 
@@ -87,4 +159,34 @@ body {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Heatmap cells: step N background with its matching text colour. */
+.heat-1 {
+  background: var(--heat-1);
+  color: var(--heat-fg-1);
+}
+.heat-2 {
+  background: var(--heat-2);
+  color: var(--heat-fg-2);
+}
+.heat-3 {
+  background: var(--heat-3);
+  color: var(--heat-fg-3);
+}
+.heat-4 {
+  background: var(--heat-4);
+  color: var(--heat-fg-4);
+}
+.heat-5 {
+  background: var(--heat-5);
+  color: var(--heat-fg-5);
+}
+.heat-6 {
+  background: var(--heat-6);
+  color: var(--heat-fg-6);
+}
+.heat-7 {
+  background: var(--heat-7);
+  color: var(--heat-fg-7);
 }
