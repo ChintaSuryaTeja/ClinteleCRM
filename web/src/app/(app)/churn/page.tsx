@@ -9,17 +9,21 @@ import { customerLabel, formatDate, formatMoney, formatNumber } from "@/lib/form
 import { getChurn, getCurrentUser, getCustomers } from "@/lib/server-api";
 
 import { ChurnChart } from "./ChurnChart";
+import { AtRisk, ModelQuality } from "./Prediction";
 
 export const metadata: Metadata = { title: "Churn" };
 
 const RECENT = 20;
 
 export default async function ChurnPage() {
-  const [user, data, recent] = await Promise.all([
+  const [user, data, recent, atRisk] = await Promise.all([
     getCurrentUser(),
     getChurn(),
     getCustomers(
       new URLSearchParams({ status: "churned", sort: "churned_at", page_size: String(RECENT) }),
+    ),
+    getCustomers(
+      new URLSearchParams({ status: "active", sort: "churn_risk", page_size: String(RECENT) }),
     ),
   ]);
   const currency = user.organization.currency;
@@ -90,6 +94,9 @@ export default async function ChurnPage() {
           ))}
         </dl>
       </Panel>
+
+      <AtRisk model={data.model} atRisk={atRisk} currency={currency} />
+      <ModelQuality model={data.model} />
 
       <Panel className="mt-6 p-5 sm:p-6">
         <SectionTitle>Churn rate by month</SectionTitle>

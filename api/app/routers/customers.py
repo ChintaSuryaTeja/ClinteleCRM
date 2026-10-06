@@ -38,6 +38,7 @@ SORT_COLUMNS = {
     "last_order": CustomerMetrics.last_order_at,
     "lifetime_value": CustomerMetrics.lifetime_value,
     "churned_at": CustomerMetrics.churned_at,
+    "churn_risk": CustomerMetrics.churn_score,
 }
 SCORE_COLUMNS = {
     "r": CustomerMetrics.r_score,
@@ -73,6 +74,8 @@ def customers_query(organization_id: int, filters: CustomerFilters) -> Select:
             CustomerMetrics.lifetime_value,
             CustomerMetrics.is_churned,
             CustomerMetrics.churned_at,
+            CustomerMetrics.churn_score.label("churn_risk"),
+            CustomerMetrics.churn_reasons,
         )
         .outerjoin(
             CustomerMetrics,
@@ -121,6 +124,8 @@ def customers_query(organization_id: int, filters: CustomerFilters) -> Select:
         query = query.where(CustomerMetrics.lifetime_value <= filters.max_lifetime_value)
     if filters.status is not None:
         query = query.where(CustomerMetrics.is_churned.is_(filters.status == "churned"))
+    if filters.min_churn_risk is not None:
+        query = query.where(CustomerMetrics.churn_score >= filters.min_churn_risk / 100)
 
     column = SORT_COLUMNS[filters.sort]
     ordered = column.asc() if filters.direction == "asc" else column.desc()
@@ -164,6 +169,8 @@ def export_customers(
         "lifetime_value",
         "status",
         "churned_on",
+        "churn_risk_percent",
+        "churn_reasons",
     ]
     lines = [
         [
@@ -181,6 +188,8 @@ def export_customers(
             row.lifetime_value if row.lifetime_value is not None else "",
             "" if row.is_churned is None else ("churned" if row.is_churned else "active"),
             row.churned_at.isoformat() if row.churned_at else "",
+            "" if row.churn_risk is None else round(row.churn_risk * 100),
+            "; ".join(row.churn_reasons or []),
         ]
         for row in rows
     ]

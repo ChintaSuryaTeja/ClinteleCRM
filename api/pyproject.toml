@@ -4,8 +4,10 @@ version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.14",
+    "anthropic>=0.40",
     "celery[redis]>=5.4",
     "fastapi>=0.115",
+    "numpy>=2.0",
     "openpyxl>=3.1",
     "psycopg[binary]>=3.2",
     "pwdlib[argon2]>=0.2",
@@ -13,7 +15,9 @@ dependencies = [
     "pydantic-settings>=2.6",
     "pyjwt>=2.10",
     "python-multipart>=0.0.20",
+    "scikit-learn>=1.5",
     "sqlalchemy>=2.0",
+    "sqlglot>=25.0",
     "uvicorn[standard]>=0.32",
 ]
 

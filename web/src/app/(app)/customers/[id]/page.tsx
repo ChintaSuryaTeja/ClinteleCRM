@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { riskPercent } from "@/components/customers/CustomerResults";
 import { SegmentBadge } from "@/components/SegmentBadge";
 import { Table, Td, Th } from "@/components/table";
 import { PageTitle, Panel, SectionTitle } from "@/components/ui";
@@ -78,6 +79,23 @@ export default async function CustomerPage({ params }: { params: Params }) {
                 : "Active: ordered in the last 90 days"}
             </p>
           </div>
+          {customer.churn_risk !== null && (
+            <div>
+              <p className="text-sm text-muted">Churn risk, next 90 days</p>
+              <p className="mt-1 font-medium">{riskPercent(customer.churn_risk)}</p>
+            </div>
+          )}
+        </Panel>
+      )}
+
+      {customer.churn_reasons && customer.churn_reasons.length > 0 && (
+        <Panel className="mt-6 p-5">
+          <p className="text-sm text-muted">Why the risk is high</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {customer.churn_reasons.map((reason) => (
+              <li key={reason}>{reason}</li>
+            ))}
+          </ul>
         </Panel>
       )}
 

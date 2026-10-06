@@ -39,6 +39,8 @@ export type CustomerRow = {
   lifetime_value: number | null;
   is_churned: boolean | null;
   churned_at: string | null;
+  churn_risk: number | null;
+  churn_reasons: string[] | null;
 };
 
 export type CustomerPage = { total: number; page: number; page_size: number; items: CustomerRow[] };
@@ -98,4 +100,33 @@ export type Churn = {
     churned_customers: number;
     rate: number | null;
   }[];
+  model: ModelRun | null;
+};
+
+export type ModelRun = {
+  trained_at: string;
+  status: "trained" | "not_enough_data";
+  message: string | null;
+  used: "model" | "baseline" | null;
+  test_cutoff: string | null;
+  train_rows: number | null;
+  test_rows: number | null;
+  test_churn_rate: number | null;
+  model_auc: number | null;
+  baseline_auc: number | null;
+  gbm_auc: number | null;
+  model_top10: number | null;
+  baseline_top10: number | null;
+  scored_customers: number | null;
+};
+
+export type AskAnswer = {
+  question: string;
+  title: string | null;
+  sql: string | null;
+  chart: { type: "bar" | "line" | "number" | "table"; x: string | null; y: string | null } | null;
+  columns: string[];
+  rows: (string | number | boolean | null)[][];
+  truncated: boolean;
+  error: string | null;
 };

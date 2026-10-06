@@ -9,4 +9,5 @@ export const BUILDER_KEYS = [
   "min_lifetime_value",
   "max_lifetime_value",
   "status",
+  "min_churn_risk",
 ] as const;

@@ -182,6 +182,7 @@ class CustomerMetrics(Base):
         CheckConstraint("m_score BETWEEN 1 AND 5", name="m_score"),
         CheckConstraint("churn_score BETWEEN 0 AND 1", name="churn_score"),
         Index("ix_customer_metrics_organization_id_segment", "organization_id", "segment"),
+        Index("ix_customer_metrics_organization_id_churn_score", "organization_id", "churn_score"),
         Index("ix_customer_metrics_organization_id_churned_at", "organization_id", "churned_at"),
     )
 
@@ -316,3 +317,39 @@ class CohortRetention(Base):
     cohort_month: Mapped[date] = mapped_column(Date, primary_key=True)
     months_since: Mapped[int] = mapped_column(Integer, primary_key=True)
     customers: Mapped[int] = mapped_column(Integer)
+
+
+# --- Step 4: churn prediction -------------------------------------------------
+
+
+class ModelRun(Base):
+    """One training run of an organization's churn model, with how well it tested."""
+
+    __tablename__ = "model_runs"
+    __table_args__ = (
+        CheckConstraint("status IN ('trained', 'not_enough_data')", name="status"),
+        CheckConstraint("used IN ('model', 'baseline')", name="used"),
+        Index("ix_model_runs_organization_id_trained_at", "organization_id", "trained_at"),
+    )
+
+    id: Mapped[int] = id_column()
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
+    trained_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    as_of: Mapped[date] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(20))
+    message: Mapped[str | None] = mapped_column(Text)  # why there is no model
+    used: Mapped[str | None] = mapped_column(String(10))  # whose scores were saved
+    test_cutoff: Mapped[date | None] = mapped_column(Date)
+    train_rows: Mapped[int | None] = mapped_column(Integer)
+    test_rows: Mapped[int | None] = mapped_column(Integer)
+    test_churn_rate: Mapped[float | None] = mapped_column(Float)
+    # ROC AUC: the chance that a customer who churned is scored riskier than one
+    # who didn't. 0.5 is a coin flip, 1.0 is perfect.
+    model_auc: Mapped[float | None] = mapped_column(Float)
+    baseline_auc: Mapped[float | None] = mapped_column(Float)
+    gbm_auc: Mapped[float | None] = mapped_column(Float)
+    # Of the 10% scored riskiest, the share that really churned.
+    model_top10: Mapped[float | None] = mapped_column(Float)
+    baseline_top10: Mapped[float | None] = mapped_column(Float)
+    scored_customers: Mapped[int | None] = mapped_column(Integer)
+    coefficients: Mapped[dict | None] = mapped_column(JSONB)

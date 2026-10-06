@@ -133,7 +133,7 @@ class DashboardOut(BaseModel):
 # --- Customers --------------------------------------------------------------
 
 CustomerSort = Literal[
-    "name", "total_spent", "orders", "last_order", "lifetime_value", "churned_at"
+    "name", "total_spent", "orders", "last_order", "lifetime_value", "churned_at", "churn_risk"
 ]
 Score = Annotated[int, Field(ge=1, le=5)]
 
@@ -159,6 +159,8 @@ class CustomerFilters(BaseModel):
     min_lifetime_value: float | None = Field(default=None, ge=0)
     max_lifetime_value: float | None = Field(default=None, ge=0)
     status: Literal["active", "churned"] | None = None
+    # Step 4: predicted chance of churning in the next 90 days, in percent.
+    min_churn_risk: int | None = Field(default=None, ge=0, le=100)
     sort: CustomerSort = "total_spent"
     direction: Literal["asc", "desc"] = "desc"
 
@@ -186,6 +188,8 @@ class CustomerRow(BaseModel):
     lifetime_value: float | None
     is_churned: bool | None
     churned_at: date | None
+    churn_risk: float | None  # 0 to 1; only for active customers
+    churn_reasons: list[str] | None
 
 
 class CustomerPage(BaseModel):
@@ -247,6 +251,25 @@ class ChurnMonth(BaseModel):
     rate: float | None
 
 
+class ModelRunOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    trained_at: datetime
+    status: Literal["trained", "not_enough_data"]
+    message: str | None
+    used: Literal["model", "baseline"] | None
+    test_cutoff: date | None
+    train_rows: int | None
+    test_rows: int | None
+    test_churn_rate: float | None
+    model_auc: float | None
+    baseline_auc: float | None
+    gbm_auc: float | None
+    model_top10: float | None
+    baseline_top10: float | None
+    scored_customers: int | None
+
+
 class ChurnOut(BaseModel):
     as_of: date | None
     monthly_churn_rate: float | None
@@ -254,3 +277,4 @@ class ChurnOut(BaseModel):
     churned_customers: int
     active_customers: int
     months: list[ChurnMonth]
+    model: ModelRunOut | None

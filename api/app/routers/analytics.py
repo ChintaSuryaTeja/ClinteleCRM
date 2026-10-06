@@ -11,11 +11,18 @@ from sqlalchemy import func, select
 
 from app.deps import CurrentUser, DbSession
 from app.metrics import is_complete_month
-from app.models import CohortRetention, CustomerMetrics, MonthlyChurn, OrganizationMetrics
+from app.models import (
+    CohortRetention,
+    CustomerMetrics,
+    ModelRun,
+    MonthlyChurn,
+    OrganizationMetrics,
+)
 from app.schemas import (
     ChurnMonth,
     ChurnOut,
     CohortRow,
+    ModelRunOut,
     RetentionOut,
     SegmentRow,
     SegmentsOut,
@@ -123,6 +130,7 @@ def churn(user: CurrentUser, db: DbSession) -> ChurnOut:
             churned_customers=0,
             active_customers=0,
             months=[],
+            model=None,
         )
 
     status_counts = dict(
@@ -151,6 +159,12 @@ def churn(user: CurrentUser, db: DbSession) -> ChurnOut:
         # Only finished months with 90 days of history before them; see is_complete_month.
         if is_complete_month(row.month, org_metrics.data_start, org_metrics.as_of)
     ]
+    latest_run = db.scalar(
+        select(ModelRun)
+        .where(ModelRun.organization_id == org)
+        .order_by(ModelRun.trained_at.desc(), ModelRun.id.desc())
+        .limit(1)
+    )
     return ChurnOut(
         as_of=org_metrics.as_of,
         monthly_churn_rate=org_metrics.monthly_churn_rate,
@@ -158,4 +172,5 @@ def churn(user: CurrentUser, db: DbSession) -> ChurnOut:
         churned_customers=status_counts.get(True, 0),
         active_customers=status_counts.get(False, 0),
         months=months,
+        model=ModelRunOut.model_validate(latest_run) if latest_run else None,
     )

@@ -63,7 +63,8 @@ def test_export_uses_the_same_filters_and_includes_every_page(acme):
     lines = response.text.splitlines()
     assert lines[0] == (
         "customer_id,name,email,orders,total_spent,first_order_date,last_order_date,"
-        "segment,r_score,f_score,m_score,lifetime_value,status,churned_on"
+        "segment,r_score,f_score,m_score,lifetime_value,status,churned_on,"
+        "churn_risk_percent,churn_reasons"
     )
     # The step 3 columns are checked in test_rfm.py; here the first seven.
     first_seven = [",".join(line.split(",")[:7]) for line in lines[1:]]

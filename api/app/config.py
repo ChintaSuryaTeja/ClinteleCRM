@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     max_upload_mb: int = 50
     # When the scheduler recalculates every organization's metrics each night.
     nightly_recalculation_hour_utc: int = Field(default=2, ge=0, le=23)
+    # Plain-English questions (Ask screen). Without a key the screen says it
+    # isn't set up and everything else keeps working.
+    anthropic_api_key: str | None = None
+    ask_model: str = "claude-opus-5-5"
 
 
 settings = Settings()

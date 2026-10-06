@@ -16,6 +16,7 @@ const NAV_ITEMS = [
   { href: "/segments", label: "Segments", adminOnly: false },
   { href: "/retention", label: "Retention", adminOnly: false },
   { href: "/churn", label: "Churn", adminOnly: false },
+  { href: "/ask", label: "Ask", adminOnly: false },
   { href: "/import", label: "Import", adminOnly: true },
 ];
 

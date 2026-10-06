@@ -43,10 +43,12 @@ from alembic.config import Config  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy.orm import Session  # noqa: E402
 
+from app.ask_sql import run_select  # noqa: E402
 from app.config import settings  # noqa: E402
 from app.db import engine, get_db  # noqa: E402
 from app.importer import process_delete, process_import  # noqa: E402
 from app.main import app  # noqa: E402
+from app.routers.ask import get_query_runner  # noqa: E402
 from app.routers.imports import JobQueue, get_job_queue  # noqa: E402
 
 
@@ -95,6 +97,10 @@ def make_client(db: Session):
     app.dependency_overrides[get_job_queue] = lambda: JobQueue(
         run_import=lambda job_id: process_import(db, job_id, settings.upload_dir),
         delete_import=lambda job_id: process_delete(db, job_id),
+    )
+    # Questions run as the restricted role inside the test's transaction.
+    app.dependency_overrides[get_query_runner] = lambda: (
+        lambda organization_id, sql: run_select(db.connection(), organization_id, sql)
     )
     clients: list[TestClient] = []
 

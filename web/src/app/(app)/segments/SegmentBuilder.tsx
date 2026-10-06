@@ -121,6 +121,17 @@ export function SegmentBuilder({ query, currency }: Props) {
           label={`Lifetime value (${currency}), at most`}
           defaultValue={current.get("max_lifetime_value") ?? ""}
         />
+        <TextField
+          id="min_churn_risk"
+          name="min_churn_risk"
+          type="number"
+          min={0}
+          max={100}
+          step={1}
+          label="Churn risk (%), at least"
+          hint="Predicted for active customers"
+          defaultValue={current.get("min_churn_risk") ?? ""}
+        />
       </div>
 
       <div className="flex flex-wrap gap-3">

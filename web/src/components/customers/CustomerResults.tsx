@@ -70,6 +70,7 @@ export function CustomerResults({ result, query, basePath, currency, filtered }:
                   />
                   <SortHeader label="Last order" column="last_order" numeric {...location} />
                   <SortHeader label="Status" column="churned_at" {...location} />
+                  <SortHeader label="Churn risk" column="churn_risk" numeric {...location} />
                 </tr>
               </thead>
               <tbody>
@@ -103,6 +104,9 @@ export function CustomerResults({ result, query, basePath, currency, filtered }:
                     <Td className="whitespace-nowrap">
                       <ChurnStatus customer={customer} />
                     </Td>
+                    <Td numeric title={customer.churn_reasons?.join("\n")}>
+                      {riskPercent(customer.churn_risk)}
+                    </Td>
                   </tr>
                 ))}
               </tbody>
@@ -120,6 +124,11 @@ export function CustomerResults({ result, query, basePath, currency, filtered }:
       )}
     </>
   );
+}
+
+/** Predicted chance of churning in the next 90 days, e.g. "82%". */
+export function riskPercent(risk: number | null): string {
+  return risk === null ? "–" : `${Math.round(risk * 100)}%`;
 }
 
 /** "545" for R=5, F=4, M=5. */
