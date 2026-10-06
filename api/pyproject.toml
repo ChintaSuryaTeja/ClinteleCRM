@@ -1,0 +1,39 @@
+[project]
+name = "crm-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.14",
+    "celery[redis]>=5.4",
+    "fastapi>=0.115",
+    "psycopg[binary]>=3.2",
+    "pwdlib[argon2]>=0.2",
+    "pydantic[email]>=2.9",
+    "pydantic-settings>=2.6",
+    "pyjwt>=2.10",
+    "sqlalchemy>=2.0",
+    "uvicorn[standard]>=0.32",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28",
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# E/F: pyflakes + pycodestyle errors, I: import sorting, B: common bugs, UP: modern syntax
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+# The local alembic/ folder holds migrations; "alembic" imports mean the library.
+known-third-party = ["alembic"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

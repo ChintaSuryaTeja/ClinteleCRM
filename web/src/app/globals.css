@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/*
+ * Colour tokens. Components use these names (bg-surface, text-muted...), never
+ * raw hex values, so light and dark mode only differ here.
+ *
+ * The theme is chosen by the data-theme attribute on <html>, which a small
+ * script in layout.tsx sets before the page paints. If that script cannot
+ * run, the media query below falls back to the system setting.
+ */
+:root {
+  --canvas: #edf1ef;
+  --surface: #ffffff;
+  --ink: #17201d;
+  --muted: #5a6763;
+  --line: #d3dbd8;
+  --accent: #155e4f;
+  --accent-strong: #0f4a3e;
+  --on-accent: #ffffff;
+  --danger: #a83a2a;
+  --danger-soft: #f8e6e2;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #101614;
+    --surface: #18201e;
+    --ink: #e3eae7;
+    --muted: #92a19c;
+    --line: #2b3633;
+    --accent: #4fbf9f;
+    --accent-strong: #74d3b7;
+    --on-accent: #08201a;
+    --danger: #f08a78;
+    --danger-soft: #3a1f1a;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --canvas: #101614;
+  --surface: #18201e;
+  --ink: #e3eae7;
+  --muted: #92a19c;
+  --line: #2b3633;
+  --accent: #4fbf9f;
+  --accent-strong: #74d3b7;
+  --on-accent: #08201a;
+  --danger: #f08a78;
+  --danger-soft: #3a1f1a;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-on-accent: var(--on-accent);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: var(--font-plex);
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  /* Every digit the same width, so numbers line up in tables and charts. */
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

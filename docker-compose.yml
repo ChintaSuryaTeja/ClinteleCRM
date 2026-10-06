@@ -1,0 +1,80 @@
+# Local development: all five pieces of the app.
+# Start everything with:  docker compose up --build
+# Values like ${POSTGRES_USER} come from the .env file next to this one.
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 2s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 20
+
+  api:
+    build: ./api
+    environment: &api-env
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES}
+      COOKIE_SECURE: ${COOKIE_SECURE}
+      # Windows folders mounted into Docker don't send file-change events, so poll.
+      WATCHFILES_FORCE_POLLING: "true"
+    # Apply any new migrations, then start the API and restart it on code changes.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    volumes:
+      - ./api:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: ./api
+    environment: *api-env
+    command: celery -A app.worker worker --loglevel=info
+    volumes:
+      - ./api:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build: ./web
+    environment:
+      # Next.js forwards /api/* to this address (see web/next.config.ts).
+      API_URL: http://api:8000
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./web:/app
+      # node_modules and .next live inside Docker, not in your project folder.
+      # That keeps tens of thousands of files out of OneDrive.
+      - web_node_modules:/app/node_modules
+      - web_next:/app/.next
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+  web_node_modules:
+  web_next:
