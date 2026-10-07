@@ -12,6 +12,8 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    # "production" hides the interactive API docs (/docs, /redoc, /openapi.json).
+    environment: Literal["development", "production"] = "development"
     database_url: str
     redis_url: str
     # Signs login tokens. Anyone who knows it can forge a login, so it must be

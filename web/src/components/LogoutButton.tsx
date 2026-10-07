@@ -1,19 +1,20 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 
 import { postJson } from "@/lib/client-api";
 
 export function LogoutButton() {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
 
   function logOut() {
     startTransition(async () => {
       await postJson("/auth/logout");
-      router.replace("/login");
-      router.refresh();
+      // A full page load, not a client-side navigation: Next.js may have cached
+      // pages fetched while the visitor was logged out (or in), which would
+      // show the wrong page now that the login has changed.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate full load (see above)
+      window.location.assign("/login");
     });
   }
 

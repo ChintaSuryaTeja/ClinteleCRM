@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useActionState } from "react";
 
 import { Button, ErrorNotice, SelectField, TextField } from "@/components/ui";
@@ -22,8 +21,6 @@ const CURRENCIES = [
 ];
 
 export function SignupForm() {
-  const router = useRouter();
-
   const [state, formAction, pending] = useActionState(
     async (_previous: FormState, form: FormData): Promise<FormState> => {
       const result = await postJson("/auth/signup", {
@@ -40,8 +37,11 @@ export function SignupForm() {
           organization_name: String(form.get("organization_name")),
           email: String(form.get("email")),
         };
-      router.replace("/dashboard");
-      router.refresh();
+      // A full page load, not a client-side navigation: Next.js may have cached
+      // pages fetched while the visitor was logged out (or in), which would
+      // show the wrong page now that the login has changed.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate full load (see above)
+      window.location.assign("/dashboard");
       return EMPTY;
     },
     EMPTY,

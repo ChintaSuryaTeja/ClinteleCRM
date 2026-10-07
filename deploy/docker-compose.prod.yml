@@ -1,0 +1,297 @@
+# Production: the whole app on one server, behind Nginx on ports 80 and 443.
+#
+# Run from this folder:
+#   cp .env.production.example .env.production      # then fill in the values
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+#
+# Differences from the development compose file (../docker-compose.yml):
+# - code is baked into the images (no folders mounted in, no auto-reload)
+# - only Nginx is reachable from outside; everything else is on private networks
+# - the API runs 2 worker processes and hides its /docs page
+# - monitoring (Prometheus, Grafana, exporters) and nightly database backups
+
+name: clientele
+
+# The API, migrations, worker and scheduler all run the same image. Only the
+# "api" service builds it (several services building one image at once clash).
+x-api-image: &api-image
+  image: ${IMAGE_REGISTRY:-clientele}/api:${IMAGE_TAG:-local}
+
+x-api-env: &api-env
+  ENVIRONMENT: production
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+  REDIS_URL: redis://redis:6379/0
+  # The ":?" makes compose stop with this message if the value is missing.
+  JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env.production}
+  JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-720}
+  COOKIE_SECURE: "true"
+  ASK_PROVIDER: ${ASK_PROVIDER:-anthropic}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+  UPLOAD_DIR: /data/uploads
+
+services:
+  # --- The app -----------------------------------------------------------------
+
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env.production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env.production}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  # Applies database migrations, then exits. The API waits for it to succeed.
+  migrate:
+    <<: *api-image
+    command: ["alembic", "upgrade", "head"]
+    environment: *api-env
+    networks: [internal]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  api:
+    <<: *api-image
+    build:
+      context: ../api
+      target: prod
+    restart: unless-stopped
+    environment:
+      <<: *api-env
+      # With 2 worker processes, each keeps its own request counts; this folder
+      # lets /metrics add them up (prometheus-client "multiprocess mode").
+      PROMETHEUS_MULTIPROC_DIR: /tmp/metrics
+    command:
+      - sh
+      - -c
+      - >-
+        rm -rf /tmp/metrics && mkdir -p /tmp/metrics &&
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+        --proxy-headers --forwarded-allow-ips '*'
+    volumes:
+      - appdata:/data
+    networks: [internal, edge]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/db', timeout=3)"
+      interval: 10s
+      retries: 12
+      start_period: 10s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker:
+    <<: *api-image
+    restart: unless-stopped
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=info", "--concurrency=2"]
+    environment: *api-env
+    volumes:
+      - appdata:/data
+    networks: [internal]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  beat:
+    <<: *api-image
+    restart: unless-stopped
+    command:
+      ["celery", "-A", "app.worker", "beat", "--loglevel=info",
+       "--schedule", "/data/celerybeat-schedule"]
+    environment: *api-env
+    volumes:
+      - appdata:/data
+    networks: [internal]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  web:
+    image: ${IMAGE_REGISTRY:-clientele}/web:${IMAGE_TAG:-local}
+    build:
+      context: ../web
+      target: prod
+      args:
+        API_URL: http://api:8000
+    restart: unless-stopped
+    environment:
+      API_URL: http://api:8000
+    networks: [edge]
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # --- The front door ---------------------------------------------------------
+
+  nginx:
+    image: nginx:1.29-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN in .env.production}
+      # How long browsers must remember to use HTTPS only. Keep 0 until the real
+      # certificate works; then set 31536000 (one year).
+      HSTS_MAX_AGE: ${HSTS_MAX_AGE:-0}
+    volumes:
+      # Files in templates/ get ${DOMAIN} etc. filled in when the container starts.
+      - ./nginx/templates:/etc/nginx/templates:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+    # Reload every 6 hours so a renewed certificate is picked up.
+    command: ["/bin/sh", "-c", "while :; do sleep 6h; nginx -s reload; done & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
+    networks: [edge]
+    depends_on:
+      - web
+      - api
+      - grafana
+
+  # Renews the Let's Encrypt certificate. Only started on the real server:
+  #   docker compose ... --profile letsencrypt up -d
+  certbot:
+    image: certbot/certbot:v4.2.0
+    profiles: [letsencrypt]
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c", "trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+
+  # --- Monitoring ---------------------------------------------------------------
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [internal]
+
+  grafana:
+    image: grafana/grafana-oss:12.1.1
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env.production}
+      # Served at https://<domain>/grafana/ through Nginx.
+      GF_SERVER_ROOT_URL: https://${DOMAIN}/grafana/
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      # No news feed fetched from grafana.com on the home page.
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks: [internal, edge]
+    depends_on:
+      - prometheus
+
+  # CPU, memory and disk of the server itself.
+  node-exporter:
+    image: prom/node-exporter:v1.9.1
+    restart: unless-stopped
+    command: ["--path.rootfs=/host"]
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [internal]
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.17.1
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_URI: db:5432/${POSTGRES_DB}?sslmode=disable
+      DATA_SOURCE_USER: ${POSTGRES_USER}
+      DATA_SOURCE_PASS: ${POSTGRES_PASSWORD}
+    networks: [internal]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Also reports the length of the job queue (the Redis list named "celery").
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.74.0
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_EXPORTER_CHECK_SINGLE_KEYS: db0=celery
+    networks: [internal]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # --- Backups --------------------------------------------------------------------
+
+  # A database dump when it starts and then every 24 hours; keeps the newest 7.
+  backup:
+    image: postgres:17
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER}
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB}
+    volumes:
+      - ./backup/backup.sh:/backup.sh:ro
+      - backups:/backups
+    networks: [internal]
+    depends_on:
+      # After migrations, so the first backup isn't of an empty database.
+      migrate:
+        condition: service_completed_successfully
+
+networks:
+  # Nginx and the three services it forwards requests to (web, api, grafana).
+  edge:
+  # Everything else. Nginx isn't on this network, so it can't reach the
+  # database, Redis or Prometheus at all. (Not marked "internal: true" because
+  # the API and worker need outbound internet for the Ask screen's AI service.)
+  internal:
+
+volumes:
+  pgdata:
+  redisdata:
+  appdata:
+  letsencrypt:
+  certbot-www:
+  prometheus-data:
+  grafana-data:
+  backups:

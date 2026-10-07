@@ -1,0 +1,11 @@
+{
+  "name": "clientele-e2e",
+  "private": true,
+  "description": "Browser tests that click through the running app (production setup, behind Nginx).",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

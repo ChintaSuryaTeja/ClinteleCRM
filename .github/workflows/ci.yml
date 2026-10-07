@@ -1,4 +1,6 @@
-# Runs on every push and pull request: lint and test the API, lint and build the web app.
+# Runs on every push and pull request: lint and test the API, lint and build
+# the web app, check the Terraform files, and run browser tests against the
+# production setup. All free for a public repository.
 name: CI
 
 on:
@@ -58,3 +60,65 @@ jobs:
         run: npm run typecheck
       - name: Build
         run: npm run build
+
+  # The Terraform files for the server: formatting, validity, and tests of the
+  # free-tier guardrails. Uses a fake Oracle provider, so no account is needed
+  # and nothing is created.
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.5
+      - name: Format
+        run: terraform fmt -recursive -check
+      - name: Validate
+        run: terraform init -backend=false -input=false && terraform validate
+      - name: Test
+        run: terraform test
+
+  # Browser tests against the production setup (deploy/docker-compose.prod.yml):
+  # production images, Nginx with HTTPS (self-signed here), worker, monitoring.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Production settings for this run only
+        working-directory: deploy
+        run: |
+          cp .env.production.example .env.production
+          for key in POSTGRES_PASSWORD JWT_SECRET GRAFANA_ADMIN_PASSWORD; do
+            sed -i "s|^$key=$|$key=$(openssl rand -hex 24)|" .env.production
+          done
+      - name: Start the production stack
+        working-directory: deploy
+        run: |
+          sh scripts/local-certificate.sh
+          docker compose -f docker-compose.prod.yml -f docker-compose.local.yml \
+            --env-file .env.production up -d --build --wait --wait-timeout 300
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install Playwright
+        working-directory: e2e
+        run: npm ci && npx playwright install --with-deps chromium
+      - name: Browser tests
+        working-directory: e2e
+        run: npx playwright test
+      - name: Container logs (on failure)
+        if: failure()
+        working-directory: deploy
+        run: docker compose -f docker-compose.prod.yml --env-file .env.production logs --tail 100
+      - name: Upload the test report (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: e2e/playwright-report
+          retention-days: 7

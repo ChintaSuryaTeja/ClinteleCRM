@@ -8,6 +8,7 @@ dependencies = [
     "celery[redis]>=5.4",
     "fastapi>=0.115",
     "google-genai>=1.0",
+    "prometheus-fastapi-instrumentator>=7.0",
     "numpy>=2.0",
     "openpyxl>=3.1",
     "psycopg[binary]>=3.2",

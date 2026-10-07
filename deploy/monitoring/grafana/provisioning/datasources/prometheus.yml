@@ -1,0 +1,12 @@
+# Grafana reads this when it starts, so the Prometheus connection exists
+# without clicking through the setup screens.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

@@ -1,0 +1,58 @@
+#cloud-config
+# Runs once, the first time the server boots.
+
+package_update: true
+package_upgrade: true
+packages:
+  - docker.io
+  - docker-compose-v2
+  - git
+  - unattended-upgrades # installs security updates automatically
+
+users:
+  - default # "ubuntu", which gets the SSH key from Terraform
+
+# No password logins over SSH, only keys.
+ssh_pwauth: false
+
+write_files:
+  # Every 5 minutes: get the latest deploy files and images, restart what changed.
+  # (Images are built and published by GitHub Actions after the tests pass.)
+  - path: /etc/systemd/system/clientele-update.service
+    content: |
+      [Unit]
+      Description=Update Clientele to the latest published version
+      # Does nothing until the settings file has been created on the server.
+      ConditionPathExists=/opt/clientele/deploy/.env.production
+      After=docker.service
+
+      [Service]
+      Type=oneshot
+      User=ubuntu
+      WorkingDirectory=/opt/clientele/deploy
+      ExecStart=/usr/bin/git -C /opt/clientele pull --ff-only
+      ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml --env-file .env.production pull --quiet
+      ExecStart=/usr/bin/docker compose -f docker-compose.prod.yml --env-file .env.production up -d --no-build --remove-orphans
+  - path: /etc/systemd/system/clientele-update.timer
+    content: |
+      [Unit]
+      Description=Check for a new Clientele version every 5 minutes
+
+      [Timer]
+      OnBootSec=2min
+      OnUnitActiveSec=5min
+
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  - usermod -aG docker ubuntu
+  - systemctl enable --now docker
+  # Oracle's Ubuntu images block every port except 22 in the server's own
+  # firewall (iptables), on top of the cloud firewall. Open 80 and 443 there too.
+  - iptables -I INPUT -p tcp -m state --state NEW -m multiport --dports 80,443 -j ACCEPT
+  - netfilter-persistent save
+  - git clone ${repository_url} /opt/clientele
+  - chown -R ubuntu:ubuntu /opt/clientele
+  - systemctl daemon-reload
+  - systemctl enable --now clientele-update.timer

@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useActionState } from "react";
 
 import { Button, ErrorNotice, TextField } from "@/components/ui";
@@ -11,8 +10,6 @@ type FormState = { error: string | null; email: string };
 const EMPTY: FormState = { error: null, email: "" };
 
 export function LoginForm() {
-  const router = useRouter();
-
   // useActionState runs this function when the form is submitted and gives
   // us what it returns (the form state) plus a "pending" flag.
   const [state, formAction, pending] = useActionState(
@@ -24,8 +21,11 @@ export function LoginForm() {
       // React clears the form after submitting; hand back what was typed
       // (except the password) so the fields can be refilled.
       if (!result.ok) return { error: result.message, email: String(form.get("email")) };
-      router.replace("/dashboard");
-      router.refresh();
+      // A full page load, not a client-side navigation: Next.js may have cached
+      // pages fetched while the visitor was logged out (or in), which would
+      // show the wrong page now that the login has changed.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- deliberate full load (see above)
+      window.location.assign("/dashboard");
       return EMPTY;
     },
     EMPTY,

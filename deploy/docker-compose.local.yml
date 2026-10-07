@@ -1,0 +1,12 @@
+# Only for trying production on your own computer (Docker Desktop on Windows
+# or Mac) and in CI's browser tests, not on the real server. Use it on top of
+# the main file:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.local.yml --env-file .env.production up -d
+#
+# Docker Desktop's Linux VM (and some CI machines) refuse the "rslave" disk
+# mount node-exporter uses on a real server, so here it gets a plain read-only
+# mount instead.
+services:
+  node-exporter:
+    volumes: !override
+      - /:/host:ro
