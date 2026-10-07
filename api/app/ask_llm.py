@@ -1,8 +1,9 @@
-"""Turning a question into SQL with Claude.
+"""Turning a question into SQL with an AI model: Claude (Anthropic) or Gemini (Google).
 
-Only the question and a description of the tables are sent to Claude, never
-the organization's data. Claude replies with structured JSON (the SQL plus a
-chart suggestion), which app/ask_sql.py then checks and runs.
+ASK_PROVIDER in .env picks which. Either way, only the question and a
+description of the tables are sent, never the organization's data. The model
+replies with structured JSON (the SQL plus a chart suggestion), which
+app/ask_sql.py then checks and runs.
 """
 
 import json
@@ -10,6 +11,10 @@ from datetime import date
 from typing import Literal
 
 import anthropic
+import httpx
+from google import genai
+from google.genai import errors as genai_errors
+from google.genai import types as genai_types
 from pydantic import BaseModel, ValidationError
 
 from app.config import settings
@@ -102,14 +107,27 @@ OUTPUT_SCHEMA = {
 
 
 def write_sql(question: str, *, currency: str, as_of: date | None) -> SqlAnswer:
+    system = INSTRUCTIONS.format(
+        schema=SCHEMA, currency=currency, as_of=as_of.isoformat() if as_of else "today"
+    )
+    if settings.ask_provider == "google":
+        reply = _ask_gemini(question, system)
+    else:
+        reply = _ask_claude(question, system)
+    try:
+        return SqlAnswer.model_validate(json.loads(reply or ""))
+    except (json.JSONDecodeError, ValidationError) as error:
+        raise AskServiceError(
+            "The AI service returned an answer in an unexpected shape."
+        ) from error
+
+
+def _ask_claude(question: str, system: str) -> str | None:
     if not settings.anthropic_api_key:
         raise AskNotConfigured(
             "Add an Anthropic API key as ANTHROPIC_API_KEY in the .env file, then restart the app."
         )
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key, timeout=60)
-    system = INSTRUCTIONS.format(
-        schema=SCHEMA, currency=currency, as_of=as_of.isoformat() if as_of else "today"
-    )
     try:
         response = client.beta.messages.create(
             model=settings.ask_model,
@@ -136,10 +154,47 @@ def write_sql(question: str, *, currency: str, as_of: date | None) -> SqlAnswer:
         raise AskServiceError("The AI service declined to answer that question.")
     if response.stop_reason == "max_tokens":
         raise AskServiceError("The AI service's answer was cut off. Try a simpler question.")
-    text = next((block.text for block in response.content if block.type == "text"), None)
-    try:
-        return SqlAnswer.model_validate(json.loads(text or ""))
-    except (json.JSONDecodeError, ValidationError) as error:
-        raise AskServiceError(
-            "The AI service returned an answer in an unexpected shape."
-        ) from error
+    return next((block.text for block in response.content if block.type == "text"), None)
+
+
+def _ask_gemini(question: str, system: str) -> str | None:
+    if not settings.google_api_key:
+        raise AskNotConfigured(
+            "Add a Google API key as GOOGLE_API_KEY in the .env file, then restart the app."
+        )
+    client = genai.Client(
+        api_key=settings.google_api_key,
+        http_options=genai_types.HttpOptions(timeout=60_000),  # milliseconds
+    )
+    config = genai_types.GenerateContentConfig(
+        system_instruction=system,
+        response_mime_type="application/json",
+        response_json_schema=OUTPUT_SCHEMA,
+        max_output_tokens=8000,
+    )
+    busy = None
+    # If Google says the main model is busy (a 5xx error), try the fallback once.
+    for model in dict.fromkeys([settings.google_model, settings.google_fallback_model]):
+        try:
+            response = client.models.generate_content(model=model, contents=question, config=config)
+        except genai_errors.ServerError as error:
+            busy = error
+            continue
+        except genai_errors.ClientError as error:
+            raise AskServiceError(
+                f"Google's AI service rejected the request ({error.code}): {error.message}"
+            ) from error
+        except httpx.HTTPError as error:
+            raise AskServiceError(
+                "Couldn't reach the AI service. Try again in a moment."
+            ) from error
+
+        if not response.candidates:
+            raise AskServiceError("The AI service declined to answer that question.")
+        finish = response.candidates[0].finish_reason
+        if finish == genai_types.FinishReason.MAX_TOKENS:
+            raise AskServiceError("The AI service's answer was cut off. Try a simpler question.")
+        if finish in (genai_types.FinishReason.SAFETY, genai_types.FinishReason.PROHIBITED_CONTENT):
+            raise AskServiceError("The AI service declined to answer that question.")
+        return response.text
+    raise AskServiceError("The AI service is busy right now. Try again in a minute.") from busy

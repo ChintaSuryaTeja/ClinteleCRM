@@ -315,3 +315,115 @@ def test_no_key_means_not_configured(monkeypatch):
     monkeypatch.setattr(settings, "anthropic_api_key", None)
     with pytest.raises(AskNotConfigured):
         ask_llm.write_sql("Anything", currency="USD", as_of=None)
+
+
+# --- The request sent to Gemini (with a fake client, no network) ----------------------
+
+GOOD_ANSWER = (
+    '{"answerable": true, "reason": null, "title": "Orders", '
+    '"sql": "SELECT COUNT(*) FROM orders", "chart": {"type": "number", "x": null, "y": "count"}}'
+)
+
+
+class FakeGeminiModels:
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)  # per call: a response, or an exception to raise
+        self.calls = []
+
+    def generate_content(self, **kwargs):
+        self.calls.append(kwargs)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+def gemini_reply(text_json, finish="STOP"):
+    from google.genai import types
+
+    return SimpleNamespace(
+        text=text_json,
+        candidates=[SimpleNamespace(finish_reason=getattr(types.FinishReason, finish))],
+    )
+
+
+def fake_gemini(monkeypatch, *outcomes):
+    models = FakeGeminiModels(outcomes)
+    monkeypatch.setattr(ask_llm.genai, "Client", lambda **_: SimpleNamespace(models=models))
+    monkeypatch.setattr(settings, "ask_provider", "google")
+    monkeypatch.setattr(settings, "google_api_key", "test-key")
+    return models
+
+
+def busy():
+    from google.genai import errors
+
+    return errors.ServerError(503, {"error": {"message": "high demand", "status": "UNAVAILABLE"}})
+
+
+def test_request_to_gemini(monkeypatch):
+    models = fake_gemini(monkeypatch, gemini_reply(GOOD_ANSWER))
+
+    result = ask_llm.write_sql("How many orders?", currency="GBP", as_of=None)
+
+    assert result.sql == "SELECT COUNT(*) FROM orders"
+    sent = models.calls[0]
+    assert sent["model"] == settings.google_model
+    assert sent["contents"] == "How many orders?"
+    assert sent["config"].response_mime_type == "application/json"
+    assert sent["config"].response_json_schema == ask_llm.OUTPUT_SCHEMA
+    assert "GBP" in sent["config"].system_instruction
+
+
+def test_gemini_falls_back_when_the_main_model_is_busy(monkeypatch):
+    models = fake_gemini(monkeypatch, busy(), gemini_reply(GOOD_ANSWER))
+
+    result = ask_llm.write_sql("How many orders?", currency="USD", as_of=None)
+
+    assert result.sql == "SELECT COUNT(*) FROM orders"
+    assert [call["model"] for call in models.calls] == [
+        settings.google_model,
+        settings.google_fallback_model,
+    ]
+
+
+def test_gemini_busy_everywhere_is_reported(monkeypatch):
+    fake_gemini(monkeypatch, busy(), busy())
+    with pytest.raises(AskServiceError, match="busy"):
+        ask_llm.write_sql("Anything", currency="USD", as_of=None)
+
+
+def test_gemini_rejected_request_is_reported(monkeypatch):
+    from google.genai import errors
+
+    rejected = errors.ClientError(
+        400, {"error": {"message": "API key not valid", "status": "INVALID"}}
+    )
+    fake_gemini(monkeypatch, rejected)
+    with pytest.raises(AskServiceError, match="rejected the request"):
+        ask_llm.write_sql("Anything", currency="USD", as_of=None)
+
+
+def test_gemini_safety_block_is_reported(monkeypatch):
+    fake_gemini(monkeypatch, gemini_reply(None, finish="SAFETY"))
+    with pytest.raises(AskServiceError, match="declined"):
+        ask_llm.write_sql("Anything", currency="USD", as_of=None)
+
+
+def test_gemini_without_a_key_is_not_configured(monkeypatch):
+    monkeypatch.setattr(settings, "ask_provider", "google")
+    with pytest.raises(AskNotConfigured, match="GOOGLE_API_KEY"):
+        ask_llm.write_sql("Anything", currency="USD", as_of=None)
+
+
+def test_provider_setting_picks_the_service(monkeypatch):
+    gemini = fake_gemini(monkeypatch, gemini_reply(GOOD_ANSWER))
+    claude = fake_anthropic(monkeypatch, reply(GOOD_ANSWER))
+
+    monkeypatch.setattr(settings, "ask_provider", "google")
+    ask_llm.write_sql("Q", currency="USD", as_of=None)
+    monkeypatch.setattr(settings, "ask_provider", "anthropic")
+    ask_llm.write_sql("Q", currency="USD", as_of=None)
+
+    assert len(gemini.calls) == 1
+    assert claude.kwargs is not None

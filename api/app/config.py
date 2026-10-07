@@ -5,6 +5,8 @@ name (case-insensitive). A missing required variable stops the app at startup,
 which is better than failing later with a confusing error.
 """
 
+from typing import Literal
+
 from pydantic import Field
 from pydantic_settings import BaseSettings
 
@@ -24,10 +26,15 @@ class Settings(BaseSettings):
     max_upload_mb: int = 50
     # When the scheduler recalculates every organization's metrics each night.
     nightly_recalculation_hour_utc: int = Field(default=2, ge=0, le=23)
-    # Plain-English questions (Ask screen). Without a key the screen says it
-    # isn't set up and everything else keeps working.
+    # Plain-English questions (Ask screen): which AI writes the SQL. Without
+    # that provider's key the screen says it isn't set up; nothing else changes.
+    ask_provider: Literal["anthropic", "google"] = "anthropic"
     anthropic_api_key: str | None = None
     ask_model: str = "claude-opus-5-5"
+    google_api_key: str | None = None
+    google_model: str = "gemini-3.5-flash"
+    # Tried when Google reports the main model as busy.
+    google_fallback_model: str = "gemini-2.5-flash"
 
 
 settings = Settings()

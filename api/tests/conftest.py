@@ -80,6 +80,14 @@ def db():
 
 
 @pytest.fixture(autouse=True)
+def no_real_ai_keys(monkeypatch) -> None:
+    """Tests use fake AI clients; make sure no real key from .env is ever used."""
+    monkeypatch.setattr(settings, "ask_provider", "anthropic")
+    monkeypatch.setattr(settings, "anthropic_api_key", None)
+    monkeypatch.setattr(settings, "google_api_key", None)
+
+
+@pytest.fixture(autouse=True)
 def upload_dir(tmp_path, monkeypatch) -> str:
     """Each test gets its own empty folder for uploaded files."""
     path = str(tmp_path / "uploads")

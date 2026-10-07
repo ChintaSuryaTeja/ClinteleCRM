@@ -14,7 +14,7 @@ const EXAMPLES = [
   "Top 10 products by revenue",
   "How many customers are in each segment?",
   "Average order value by month",
-  "Active customers with over 70% churn risk who spent more than 1,000",
+  "Which active customers are most likely to churn?",
 ];
 
 type Outcome =
